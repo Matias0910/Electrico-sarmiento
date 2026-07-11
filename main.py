@@ -24,7 +24,7 @@ class PDF(FPDF):
 
 
 # --- Configuración de la página ---
-st.set_page_config(page_title="Informe Castelar", layout="wide")
+st.set_page_config(page_title="Informe Castelar", page_icon="assets/logo.png", layout="wide")
 st.title("⚡ Carga de Informe Técnico (Electrico) - Depósito Castelar")
 
 # --- Inicialización del estado de la sesión ---
