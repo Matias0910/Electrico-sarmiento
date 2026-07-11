@@ -53,39 +53,50 @@ def agregar_tarea(sistema, datos):
 COCHES = ["TC1", "M1-1", "M2-1", "T3", "M1-2", "M2-2", "M4", "M3", "TC2"]
 
 TAREAS_CONFIG = [
-    {"nombre": "Fusibles (Patín)", "campos": [
+    {"nombre": "FUSIBLES (PATÍN)", "campos": [
         {"label": "Coche", "tipo": "selectbox", "opciones": COCHES},
         {"label": "Boguie", "tipo": "selectbox", "opciones": ["Boguie 1", "Boguie 2"]},
         {"label": "Lado", "tipo": "selectbox", "opciones": ["Norte", "Sur"]},
         {"label": "Causa", "tipo": "selectbox", "opciones": ["Quemado", "Cortocircuito", "Intermitente"]},
     ]},
-    {"nombre": "Trencitas", "campos": [
+    {"nombre": "TRENCITAS", "campos": [
         {"label": "Coche", "tipo": "selectbox", "opciones": COCHES},
         {"label": "Ubicación", "tipo": "selectbox", "opciones": ["Caja Auxiliar", "Caja Principal"]},
         {"label": "Causa", "tipo": "selectbox", "opciones": ["Corte", "Desgaste"]},
     ]},
-    {"nombre": "Luces Delanteras", "campos": [
+    {"nombre": "LUCES DE PODER", "campos": [
         {"label": "Sentido", "tipo": "selectbox", "opciones": ["Norte", "Sur"]},
         {"label": "Tipo", "tipo": "selectbox", "opciones": ["Alta", "Baja"]},
         {"label": "Causa", "tipo": "selectbox", "opciones": ["Balasto", "Lámpara"]},
     ]},
-    {"nombre": "Iluminación Interna", "campos": [
+    {"nombre": "ILUMINACIÓN INTERNA", "campos": [
         {"label": "Coche", "tipo": "selectbox", "opciones": COCHES},
         {"label": "Componente", "tipo": "selectbox", "opciones": ["Tubo LED", "Tubo LED con Puente", "Fluo 36w"]},
         {"label": "Causa", "tipo": "selectbox", "opciones": ["Balasto", "Zócalo", "Quemado"]},
         {"label": "Cantidad", "tipo": "number_input", "default": 1},
     ]},
-    {"nombre": "BCH", "campos": [
-        {"label": "Falla", "tipo": "selectbox", "opciones": ["Preventivo", "Falla Electrónica", "Cortocircuito"]},
+    {"nombre": "PRECINTOS NUMÉRICOS", "visible_en": ["Bimestral", "Quincenal"], "campos": [
+        {"label": "Coche", "tipo": "selectbox", "opciones": ["TC1", "TC2"]},
+        {"label": "Sistema", "tipo": "selectbox", "opciones": ["ATS", "ATP", "SKEMP"]},
+        {"label": "Número", "tipo": "text_input"},
     ]},
-    {"nombre": "Unidad de Potencia", "campos": [
-        {"label": "Falla", "tipo": "selectbox", "opciones": ["Preventivo", "Falla Electrónica", "Cortocircuito"]},
+    {"nombre": "LIMPIEZA SIV (BIMESTRAL)", "visible_en": ["Bimestral"], "campos": [
+        {"label": "Coche", "tipo": "selectbox", "opciones": ["TC1", "TC2", "T3"]},
+        {"label": "Estado", "tipo": "selectbox", "opciones": ["Realizado"]},
+    ]},
+    {"nombre": "LIMPIEZA COMPRESORES (QUINCENAL)", "visible_en": ["Quincenal"], "campos": [
+        {"label": "Coche", "tipo": "selectbox", "opciones": ["TC1", "TC2"]},
+        {"label": "Estado", "tipo": "selectbox", "opciones": ["Realizado"]},
     ]},
 ]
 
-def generar_formularios_tareas():
+def generar_formularios_tareas(tipo_informe_seleccionado):
     """Genera dinámicamente los expanders y formularios para cada tipo de tarea."""
     for i, config in enumerate(TAREAS_CONFIG):
+        # Lógica para mostrar tareas condicionalmente
+        if "visible_en" in config and tipo_informe_seleccionado not in config["visible_en"]:
+            continue # Si la tarea no corresponde al tipo de informe, no la muestra
+
         with st.expander(config["nombre"]):
             # Usamos un prefijo único para las claves de los widgets
             key_prefix = f"task_{i}_"
@@ -101,6 +112,8 @@ def generar_formularios_tareas():
                         datos_capturados[campo['label']] = st.selectbox(campo['label'], campo['opciones'], key=key)
                     elif campo["tipo"] == "number_input":
                         datos_capturados[campo['label']] = st.number_input(campo['label'], min_value=1, value=campo['default'], key=key)
+                    elif campo["tipo"] == "text_input":
+                        datos_capturados[campo['label']] = st.text_input(campo['label'], key=key)
             
             if st.button(f"➕ Agregar {config['nombre']}", key=f"{key_prefix}btn"):
                 agregar_tarea(config['nombre'], datos_capturados)
@@ -108,7 +121,7 @@ def generar_formularios_tareas():
 
 # --- Carga de Tareas (UI) ---
 st.subheader("Agregar Tareas al Informe")
-generar_formularios_tareas()
+generar_formularios_tareas(tipo_informe)
 
 with st.expander("Otras Tareas / Notas"):
     sistema_otro = st.text_input("Sistema / Componente", key="otro_sistema")
