@@ -1,0 +1,15 @@
+[theme]
+# Color principal para elementos interactivos (botones, selectores, etc.)
+primaryColor="#FFFFFF"
+
+# Color de fondo para el contenido principal
+backgroundColor="#0073B8"
+
+# Color de fondo para la barra lateral
+secondaryBackgroundColor="#005A92"
+
+# Color del texto
+textColor="#FFFFFF"
+
+# Fuente a utilizar en la aplicación
+font="sans serif"
