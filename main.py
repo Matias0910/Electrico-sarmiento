@@ -33,6 +33,8 @@ if 'lista_tareas' not in st.session_state:
     st.session_state.lista_tareas = []
 if 'pdf_bytes' not in st.session_state:
     st.session_state.pdf_bytes = None
+if 'tareas_multi_temp' not in st.session_state:
+    st.session_state.tareas_multi_temp = {}
 
 # --- Sidebar ---
 with st.sidebar:
@@ -53,38 +55,37 @@ def agregar_tarea(sistema, datos):
 COCHES = ["TC1", "M1-1", "M2-1", "T3", "M1-2", "M2-2", "M4", "M3", "TC2"]
 
 TAREAS_CONFIG = [
-    {"nombre": "FUSIBLES (PATÍN)", "campos": [
-        {"label": "Coche", "tipo": "selectbox", "opciones": COCHES},
+    {"nombre": "FUSIBLES (PATÍN)", "tipo_entrada": "multiple", "campos": [
         {"label": "Boguie", "tipo": "selectbox", "opciones": ["Boguie 1", "Boguie 2"]},
         {"label": "Lado", "tipo": "selectbox", "opciones": ["Norte", "Sur"]},
         {"label": "Causa", "tipo": "selectbox", "opciones": ["Quemado", "Cortocircuito", "Intermitente"]},
     ]},
-    {"nombre": "TRENCITAS", "campos": [
+    {"nombre": "TRENCITAS", "tipo_entrada": "simple", "campos": [
         {"label": "Coche", "tipo": "selectbox", "opciones": COCHES},
         {"label": "Ubicación", "tipo": "selectbox", "opciones": ["Caja Auxiliar", "Caja Principal"]},
         {"label": "Causa", "tipo": "selectbox", "opciones": ["Corte", "Desgaste"]},
     ]},
-    {"nombre": "LUCES DE PODER", "campos": [
+    {"nombre": "LUCES DE PODER", "tipo_entrada": "simple", "campos": [
         {"label": "Sentido", "tipo": "selectbox", "opciones": ["Norte", "Sur"]},
         {"label": "Tipo", "tipo": "selectbox", "opciones": ["Alta", "Baja"]},
         {"label": "Causa", "tipo": "selectbox", "opciones": ["Balasto", "Lámpara"]},
     ]},
-    {"nombre": "ILUMINACIÓN INTERNA", "campos": [
-        {"label": "Coche", "tipo": "selectbox", "opciones": COCHES},
+    {"nombre": "ILUMINACIÓN INTERNA", "tipo_entrada": "multiple", "campos": [
         {"label": "Componente", "tipo": "selectbox", "opciones": ["Tubo LED", "Tubo LED con Puente", "Fluo 36w"]},
         {"label": "Causa", "tipo": "selectbox", "opciones": ["Balasto", "Zócalo", "Quemado"]},
-        {"label": "Cantidad", "tipo": "number_input", "default": 1},
+        {"label": "Cantidad", "tipo": "number_input", "default": 1, "min_value": 1},
     ]},
-    {"nombre": "PRECINTOS NUMÉRICOS", "visible_en": ["Bimestral", "Quincenal"], "campos": [
+    {"nombre": "PRECINTOS NUMÉRICOS", "tipo_entrada": "simple", "visible_en": ["Bimestral", "Quincenal"], "campos": [
         {"label": "Coche", "tipo": "selectbox", "opciones": ["TC1", "TC2"]},
-        {"label": "Sistema", "tipo": "selectbox", "opciones": ["ATS", "ATP", "SKEMP"]},
-        {"label": "Número", "tipo": "text_input"},
+        {"label": "N° ATS", "tipo": "text_input"},
+        {"label": "N° ATP", "tipo": "text_input"},
+        {"label": "N° SKEMP", "tipo": "text_input"},
     ]},
-    {"nombre": "LIMPIEZA SIV (BIMESTRAL)", "visible_en": ["Bimestral"], "campos": [
+    {"nombre": "LIMPIEZA SIV (BIMESTRAL)", "tipo_entrada": "simple", "visible_en": ["Bimestral"], "campos": [
         {"label": "Coche", "tipo": "selectbox", "opciones": ["TC1", "TC2", "T3"]},
         {"label": "Estado", "tipo": "selectbox", "opciones": ["Realizado"]},
     ]},
-    {"nombre": "LIMPIEZA COMPRESORES (QUINCENAL)", "visible_en": ["Quincenal"], "campos": [
+    {"nombre": "LIMPIEZA COMPRESORES (QUINCENAL)", "tipo_entrada": "simple", "visible_en": ["Quincenal"], "campos": [
         {"label": "Coche", "tipo": "selectbox", "opciones": ["TC1", "TC2"]},
         {"label": "Estado", "tipo": "selectbox", "opciones": ["Realizado"]},
     ]},
@@ -100,38 +101,97 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
         with st.expander(config["nombre"]):
             # Usamos un prefijo único para las claves de los widgets
             key_prefix = f"task_{i}_"
-            
-            num_campos = len(config["campos"])
-            cols = st.columns(num_campos)
             datos_capturados = {}
+            tipo_entrada = config.get("tipo_entrada", "simple") # 'simple' por defecto
 
-            for j, campo in enumerate(config["campos"]):
-                with cols[j]:
-                    key = f"{key_prefix}{campo['label'].lower()}"
-                    if campo["tipo"] == "selectbox":
-                        datos_capturados[campo['label']] = st.selectbox(campo['label'], campo['opciones'], key=key)
-                    elif campo["tipo"] == "number_input":
-                        datos_capturados[campo['label']] = st.number_input(campo['label'], min_value=1, value=campo['default'], key=key)
-                    elif campo["tipo"] == "text_input":
-                        datos_capturados[campo['label']] = st.text_input(campo['label'], key=key)
-            
-            if st.button(f"➕ Agregar {config['nombre']}", key=f"{key_prefix}btn"):
-                agregar_tarea(config['nombre'], datos_capturados)
-                st.rerun()
+            if tipo_entrada == "multiple":
+                # Inicializar la lista temporal para esta tarea si no existe
+                if i not in st.session_state.tareas_multi_temp:
+                    st.session_state.tareas_multi_temp[i] = []
+
+                # Formulario para agregar una tarea a la vez
+                st.write("**Paso 1: Añadir tarea por coche**")
+                form_cols = st.columns(len(config["campos"]) + 2) # +2 para Coche y botón
+                
+                with form_cols[0]:
+                    coche_seleccionado = st.selectbox("Coche", COCHES, key=f"{key_prefix}coche_select")
+                
+                for j, campo in enumerate(config["campos"]):
+                    with form_cols[j+1]:
+                        key = f"{key_prefix}{j}_{campo['label'].lower().replace(' ', '_')}"
+                        if campo["tipo"] == "selectbox":
+                            datos_capturados[campo['label']] = st.selectbox(campo['label'], campo['opciones'], key=key)
+                        elif campo["tipo"] == "number_input":
+                            datos_capturados[campo['label']] = st.number_input(campo['label'], min_value=campo.get("min_value", 1), value=campo.get('default', 1), key=key)
+                
+                with form_cols[-1]:
+                    st.write("‎") # Espacio para alinear el botón
+                    if st.button("➕", key=f"{key_prefix}btn_add_temp", help=f"Añadir esta tarea a la lista para {config['nombre']}"):
+                        datos_completos = {"Coche": coche_seleccionado, **datos_capturados}
+                        st.session_state.tareas_multi_temp[i].append(datos_completos)
+                        st.rerun()
+
+                # Mostrar la lista de tareas temporales
+                if st.session_state.tareas_multi_temp[i]:
+                    st.divider()
+                    st.write("**Paso 2: Revisar y confirmar tareas**")
+                    for idx, tarea_temp in enumerate(st.session_state.tareas_multi_temp[i]):
+                        col1, col2 = st.columns([0.9, 0.1])
+                        datos_str = " | ".join([f"{k}: {v}" for k, v in tarea_temp.items()])
+                        col1.markdown(f"- {datos_str}")
+                        if col2.button("🗑️", key=f"{key_prefix}del_temp_{idx}", help="Quitar esta tarea de la lista"):
+                            st.session_state.tareas_multi_temp[i].pop(idx)
+                            st.rerun()
+                    
+                    if st.button(f"✅ Confirmar y Agregar {len(st.session_state.tareas_multi_temp[i])} Tarea(s) al Informe", key=f"{key_prefix}btn_confirm_multiple", type="primary"):
+                        for tarea_datos in st.session_state.tareas_multi_temp[i]:
+                            agregar_tarea(config['nombre'], tarea_datos)
+                        # Limpiar la lista temporal después de agregar
+                        st.session_state.tareas_multi_temp[i] = []
+                        st.rerun()
+
+            else: # tipo_entrada 'simple'
+                num_campos = len(config["campos"])
+                cols = st.columns(num_campos)
+                for j, campo in enumerate(config["campos"]):
+                    with cols[j]:
+                        key = f"{key_prefix}{j}_{campo['label'].lower().replace(' ', '_')}"
+                        if campo["tipo"] == "selectbox":
+                            datos_capturados[campo['label']] = st.selectbox(campo['label'], campo['opciones'], key=key)
+                        elif campo["tipo"] == "number_input":
+                            datos_capturados[campo['label']] = st.number_input(campo['label'], min_value=campo.get("min_value", 1), value=campo.get('default', 1), key=key)
+                        elif campo["tipo"] == "text_input":
+                            datos_capturados[campo['label']] = st.text_input(campo['label'], key=key)
+                
+                if st.button(f"➕ Agregar {config['nombre']}", key=f"{key_prefix}btn"):
+                    if config['nombre'] == "PRECINTOS NUMÉRICOS" and not any(v for k, v in datos_capturados.items() if k.startswith('N°')):
+                        pass # No agregar si no hay número de precinto
+                    else:
+                        agregar_tarea(config['nombre'], datos_capturados)
+                    st.rerun()
 
 # --- Carga de Tareas (UI) ---
 st.subheader("Agregar Tareas al Informe")
 generar_formularios_tareas(tipo_informe)
 
 with st.expander("Otras Tareas / Notas"):
-    sistema_otro = st.text_input("Sistema / Componente", key="otro_sistema")
-    detalle_otro = st.text_area("Descripción de la tarea o nota", key="otro_detalle")
-    if st.button("➕ Agregar Nota"):
-        if sistema_otro and detalle_otro:
-            agregar_tarea(sistema_otro, {'Detalle': detalle_otro})
-            st.rerun()
+    # Callback para limpiar los campos de texto de las notas
+    def agregar_y_limpiar_nota():
+        # Primero, lee los valores del estado de la sesión
+        sistema = st.session_state.otro_sistema
+        detalle = st.session_state.otro_detalle
+        
+        if sistema and detalle:
+            agregar_tarea(sistema, {'Detalle': detalle})
+            # Luego, limpia los campos
+            st.session_state.otro_sistema = ""
+            st.session_state.otro_detalle = ""
         else:
             st.warning("Por favor, complete el sistema y la descripción.")
+
+    sistema_otro = st.text_input("Sistema / Componente", key="otro_sistema")
+    detalle_otro = st.text_area("Descripción de la tarea o nota", key="otro_detalle")
+    st.button("➕ Agregar Nota", on_click=agregar_y_limpiar_nota)
 
 
 # --- Funciones de ayuda ---
@@ -232,9 +292,11 @@ if st.session_state.lista_tareas:
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Hubo un error al guardar el informe: {e}")
-    if st.button("👁️ Previsualizar PDF"):
-        pdf_bytes = generar_pdf(fecha_trabajo, tren, km, st.session_state.lista_tareas, observaciones)
-        st.session_state.pdf_bytes = pdf_bytes # Guardar en el estado de la sesión
+
+    with col2:
+        if st.button("👁️ Previsualizar PDF"):
+            pdf_bytes = generar_pdf(fecha_trabajo, tren, km, st.session_state.lista_tareas, observaciones)
+            st.session_state.pdf_bytes = pdf_bytes # Guardar en el estado de la sesión
 
     if 'pdf_bytes' in st.session_state and st.session_state.pdf_bytes:
         # Mostrar el PDF
