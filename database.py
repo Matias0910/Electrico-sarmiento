@@ -2,6 +2,8 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure, ConfigurationError
 import os
 from dotenv import load_dotenv
+import pandas as pd
+
 
 # Cargar variables de entorno desde un archivo .env
 load_dotenv()
@@ -64,3 +66,66 @@ def eliminar_tarea_de_informe(informe_id, tarea_a_eliminar):
         {"$pull": {"tareas": tarea_a_eliminar}}
     )
     return resultado.modified_count
+
+def obtener_estadisticas_fallas(filtro_tren=None, filtro_coche=None):
+    """
+    Obtiene y procesa estadísticas de fallas desde MongoDB usando un pipeline de agregación.
+    """
+    if collection is None:
+        raise ConnectionFailure("No hay conexión a la base de datos.")
+
+    pipeline = []
+
+    # Paso 1: Filtrar por tren si se especifica
+    if filtro_tren:
+        pipeline.append({"$match": {"tren": filtro_tren}})
+
+    # Paso 2: Desenrollar el array de tareas para procesar cada una individualmente
+    pipeline.append({"$unwind": "$tareas"})
+
+    # Paso 3: Excluir tareas que no son consideradas fallas
+    tareas_a_excluir = [
+        "PRECINTOS NUMÉRICOS",
+        "LIMPIEZA SIV (BIMESTRAL)",
+        "LIMPIEZA COMPRESORES (QUINCENAL)"
+    ]
+    pipeline.append({
+        "$match": {
+            "tareas.sistema": {"$nin": tareas_a_excluir}
+        }
+    })
+
+    # Paso 4: Filtrar por coche si se especifica
+    if filtro_coche:
+        pipeline.append({"$match": {"tareas.datos.Coche": filtro_coche}})
+
+    # Paso 5: Agrupar por sistema (nombre de la tarea) y causa
+    # Se usa $ifNull para manejar tareas que no tienen 'Causa' (ej. Notas, Limpieza)
+    pipeline.append({
+        "$group": {
+            "_id": {
+                "sistema": "$tareas.sistema",
+                "causa": {"$ifNull": ["$tareas.datos.Causa", "N/A"]},
+                "coche": {"$ifNull": ["$tareas.datos.Coche", "N/A"]}
+            },
+            "cantidad": {"$sum": 1}
+        }
+    })
+
+    # Paso 6: Ordenar por cantidad de forma descendente
+    pipeline.append({"$sort": {"cantidad": -1}})
+
+    # Paso 7: Proyectar para un formato de salida más limpio y legible
+    pipeline.append({
+        "$project": {
+            "_id": 0,
+            "Coche": "$_id.coche",
+            "Componente / Tarea": "$_id.sistema",
+            "Causa de la Falla": "$_id.causa",
+            "Cantidad": "$cantidad"
+        }
+    })
+
+    resultados = list(collection.aggregate(pipeline))
+    
+    return pd.DataFrame(resultados)

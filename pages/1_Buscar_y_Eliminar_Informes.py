@@ -1,10 +1,24 @@
 import streamlit as st
 from database import buscar_informes, eliminar_informe, eliminar_tarea_de_informe
+from pdf_utils import generar_pdf
 from datetime import datetime
 from bson.objectid import ObjectId
 
 st.set_page_config(page_title="Buscar Informes", layout="wide")
+
 st.title("🔎 Buscar y Eliminar Informes")
+
+# --- Estilos CSS para el botón de eliminar ---
+st.markdown("""
+<style>
+    /* Apunta al botón de eliminar por su tipo y lo hace rojo */
+    div[data-testid="stButton"] > button[kind="primary"] {
+        background-color: #DC3545; /* Rojo de peligro */
+        color: white; /* Texto blanco */
+        border: 1px solid #DC3545;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 st.write("Aquí puedes ver y eliminar los informes de mantenimiento guardados.")
 
@@ -72,11 +86,31 @@ try:
                 st.write("**Observaciones:**")
                 st.write(informe.get("obs", "Sin observaciones."))
 
-                st.write("---")
-                if st.button("🗑️ Eliminar Informe", key=f"del_{informe_id_str}", type="primary"):
-                    eliminar_informe(informe["_id"])
-                    st.success(f"Informe del tren {informe['tren']} ({fecha_legible}) eliminado.")
-                    st.rerun()
+                st.divider()
+                
+                # --- Botones de Acción por Informe ---
+                col_pdf, col_delete = st.columns(2)
+                with col_pdf:
+                    # Generar PDF para este informe específico
+                    pdf_bytes = generar_pdf(
+                        fecha=datetime.fromisoformat(informe.get('fecha')),
+                        tren=informe.get('tren'),
+                        km=informe.get('km'),
+                        tareas=informe.get('tareas', []),
+                        observaciones=informe.get('obs', '')
+                    )
+                    st.download_button(
+                        label="📄 Generar PDF",
+                        data=pdf_bytes,
+                        file_name=f"informe_tren_{informe['tren']}_{fecha_legible.split(' ')[0].replace('/', '-')}.pdf",
+                        mime="application/pdf",
+                        key=f"pdf_{informe_id_str}"
+                    )
+                with col_delete:
+                    if st.button("🗑️ Eliminar Informe Completo", key=f"del_{informe_id_str}", type="primary"):
+                        eliminar_informe(informe["_id"])
+                        st.success(f"Informe del tren {informe['tren']} ({fecha_legible}) eliminado.")
+                        st.rerun()
 except Exception as e:
     st.error(f"❌ No se pudo conectar a la base de datos: {e}")
     st.info("Por favor, revisa tu cadena de conexión MONGO_URI y la consola para más detalles.")
