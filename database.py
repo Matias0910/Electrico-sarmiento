@@ -185,8 +185,10 @@ def buscar_evento(codigo=None, texto=None, categoria=None):
     """
     Busca eventos por código, texto libre y/o categoría.
     """
-    if documentos_collection is None:
+    if db is None:
         raise ConnectionFailure("No hay conexión a la base de datos.")
+
+    eventos_collection = db["eventos_fallas"]
 
     query_conditions = []
     if codigo and codigo.strip():
@@ -205,4 +207,4 @@ def buscar_evento(codigo=None, texto=None, categoria=None):
         query_conditions.append({"categoria": categoria})
 
     query = {"$and": query_conditions} if query_conditions else {}
-    return list(documentos_collection.find(query))
+    return list(eventos_collection.find(query))

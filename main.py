@@ -46,6 +46,13 @@ def agregar_tarea(sistema, datos):
     st.session_state.lista_tareas.append({"sistema": sistema, "datos": datos})
     st.session_state.pdf_bytes = None  # Invalida el PDF previo al agregar nueva tarea
 
+def limpiar_estado_formularios():
+    """Limpia todos los widgets de los formularios eliminando sus claves del estado de sesión."""
+    # Itera sobre una copia de las claves para poder modificar el diccionario
+    for key in list(st.session_state.keys()):
+        if key.startswith("task_"):
+            del st.session_state[key]
+
 # --- Configuración de Tareas (Refactorización) ---
 COCHES = ["TC1", "M1-1", "M2-1", "T3", "M1-2", "M2-2", "M3", "M4", "TC2"]
 
@@ -73,6 +80,15 @@ TAREAS_CONFIG = [
     ]},
     {"nombre": "LIMPIEZA SIV (BIMESTRAL)", "tipo_entrada": "limpieza_layout", "visible_en": ["Bimestral"], "coches": ["TC1", "TC2", "T3"]},
     {"nombre": "LIMPIEZA COMPRESORES (QUINCENAL)", "tipo_entrada": "limpieza_layout", "visible_en": ["Quincenal"], "coches": ["TC1", "TC2"]},
+    {"nombre": "CONTINUIDAD", "tipo_entrada": "confirmacion_simple_layout", "campos": []},
+    {"nombre": "CAMARAS", "tipo_entrada": "camaras_layout", "campos": [
+        {"label": "Causa", "tipo": "selectbox", "opciones": ["No funciona", "Sin imagen", "Imagen distorsionada", "Sucia"]}
+    ]},
+    {"nombre": "LIMPIEZA GABINETES", "tipo_entrada": "confirmacion_simple_layout", "campos": []},
+    {"nombre": "AMPLIFICADOR", "tipo_entrada": "simple_check_layout", "campos": []},
+    {"nombre": "INTERFAZ(SALON)", "tipo_entrada": "simple_check_salon_layout", "campos": []},
+    {"nombre": "INTERFAZ (Cabina)", "tipo_entrada": "simple_check_cabinas_layout", "campos": []},
+    {"nombre": "LCU", "tipo_entrada": "simple_check_layout", "campos": []},
     {"nombre": "BCH", "tipo_entrada": "simple_check_layout", "campos": []},
     {"nombre": "PW", "tipo_entrada": "simple_check_layout", "campos": []},
 ]
@@ -232,6 +248,42 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                             if causa_aux != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Caja Auxiliar", "Causa": causa_aux}})
                             if causa_ppal != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Caja Principal", "Causa": causa_ppal}})
 
+            elif tipo_entrada == "camaras_layout":
+                opciones_causa = ["-"] + config["campos"][0]["opciones"]
+
+                # --- Sección para Cabinas (TC1 y TC2) ---
+                st.markdown("##### Cámaras de Cabina")
+                for coche_cabina in ["TC1", "TC2"]:
+                    with st.container(border=True):
+                        st.subheader(f"Cabina {coche_cabina}")
+                        col1, col2 = st.columns(2)
+                        causa_pupitre = col1.selectbox("Cámara Pupitre", opciones_causa, key=f"{key_prefix}{coche_cabina}_pupitre")
+                        causa_via = col2.selectbox("Cámara Ruta de Vía", opciones_causa, key=f"{key_prefix}{coche_cabina}_via")
+
+                        if causa_pupitre != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche_cabina, "Ubicación": "Pupitre", "Causa": causa_pupitre}})
+                        if causa_via != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche_cabina, "Ubicación": "Ruta de Vía", "Causa": causa_via}})
+                
+                st.divider()
+
+                # --- Sección para Coches Intermedios ---
+                st.markdown("##### Cámaras de Salón (Interiores)")
+                coches_intermedios = [c for c in COCHES if c not in ["TC1", "TC2"]]
+                
+                st.write("**Paso 1: Selecciona los coches a intervenir**")
+                cols_coches = st.columns(len(coches_intermedios))
+                coches_seleccionados = {}
+                for idx, coche in enumerate(coches_intermedios):
+                    coches_seleccionados[coche] = cols_coches[idx].toggle(coche, key=f"{key_prefix}toggle_salon_{coche}")
+                
+                for coche, activo in coches_seleccionados.items():
+                    if activo:
+                        with st.container(border=True):
+                            st.subheader(f"Cámaras para: {coche}")
+                            causa_c1 = st.selectbox("Cámara 1", opciones_causa, key=f"{key_prefix}{coche}_c1")
+                            causa_c2 = st.selectbox("Cámara 2", opciones_causa, key=f"{key_prefix}{coche}_c2")
+                            if causa_c1 != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Cámara 1", "Causa": causa_c1}})
+                            if causa_c2 != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Cámara 2", "Causa": causa_c2}})
+
             elif tipo_entrada == "luces_cabina_layout":
                 for coche_cabina in ["TC1", "TC2"]:
                     with st.container(border=True):
@@ -297,6 +349,34 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                         # Si se marca, se agrega la tarea para ese coche
                         datos = {"Coche": coche, "Estado": "Cambiado"}
                         tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
+
+            elif tipo_entrada == "simple_check_salon_layout":
+                st.write("**Selecciona los coches donde se realizó el cambio:**")
+                coches_salon = [c for c in COCHES if c not in ["TC1", "TC2"]]
+                cols_coches = st.columns(len(coches_salon))
+                for idx, coche in enumerate(coches_salon):
+                    realizado = cols_coches[idx].checkbox(coche, key=f"{key_prefix}check_{coche}")
+                    if realizado:
+                        # Si se marca, se agrega la tarea para ese coche
+                        datos = {"Coche": coche, "Estado": "Cambiado"}
+                        tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
+
+            elif tipo_entrada == "simple_check_cabinas_layout":
+                st.write("**Selecciona la cabina donde se realizó el cambio:**")
+                cabinas = ["TC1", "TC2"]
+                cols_coches = st.columns(len(cabinas))
+                for idx, coche in enumerate(cabinas):
+                    realizado = cols_coches[idx].checkbox(coche, key=f"{key_prefix}check_{coche}")
+                    if realizado:
+                        datos = {"Coche": coche, "Estado": "Cambiado"}
+                        tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
+
+            elif tipo_entrada == "confirmacion_simple_layout":
+                st.write("Marca la casilla para confirmar que la tarea fue completada.")
+                tarea_realizada = st.checkbox("Tarea Realizada", key=f"{key_prefix}realizada")
+                if tarea_realizada:
+                    datos = {"Estado": "Realizado"}
+                    tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
 
 # --- Carga de Tareas (UI) ---
 st.subheader("Agregar Tareas al Informe")
@@ -367,6 +447,7 @@ if st.session_state.lista_tareas:
                 st.balloons()
                 st.session_state.lista_tareas = []
                 st.session_state.pdf_bytes = None
+                limpiar_estado_formularios() # Limpiamos los campos de los formularios
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Hubo un error al guardar el informe: {e}")
