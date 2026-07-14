@@ -3,7 +3,9 @@ from pymongo.errors import ConnectionFailure, OperationFailure, ConfigurationErr
 import os
 from dotenv import load_dotenv
 import pandas as pd
+import streamlit as st
 
+from datetime import datetime
 
 # Cargar variables de entorno desde un archivo .env
 load_dotenv()
@@ -14,24 +16,31 @@ DB_NAME = "app_castelar"
 COLLECTION_NAME = "informes_mantenimiento"
 
 # --- Cliente de base de datos centralizado ---
-# Se crea una sola instancia del cliente para ser reutilizada en toda la aplicación.
-client = None
-collection = None
-
-if not MONGO_URI:
-    print("❌ Error: La variable de entorno MONGO_URI no está definida.")
-    # En una app de Streamlit, st.error() sería más visible, pero esto funciona al inicio.
-else:
+# Usamos cache_resource para crear una única conexión que persiste.
+@st.cache_resource
+def init_connection():
+    """Inicializa la conexión a MongoDB y muestra errores en la UI si falla."""
+    if not MONGO_URI:
+        st.error("Error Crítico: La variable de entorno MONGO_URI no está definida. Revisa tu archivo `.env`.")
+        return None
     try:
-        client = MongoClient(MONGO_URI)
-        # La siguiente línea verifica que la conexión se estableció correctamente.
+        # Usamos un timeout para no esperar indefinidamente si el servidor no responde.
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
         client.admin.command('ping')
-        db = client[DB_NAME]
-        collection = db[COLLECTION_NAME]
         print("✅ Conexión a MongoDB establecida con éxito.")
+        return client
     except (ConnectionFailure, ConfigurationError) as e:
-        print(f"❌ Error de conexión o configuración de MongoDB: {e}")
-        # La colección permanecerá como None, las funciones lo manejarán.
+        st.error(f"❌ No se pudo conectar a la base de datos. Error: {e}")
+        st.warning("Asegúrate de que la MONGO_URI en tu archivo `.env` es correcta y que el servidor de MongoDB está funcionando.")
+        return None
+
+# --- Inicialización de la conexión ---
+client = init_connection()
+
+# Las colecciones serán None si la conexión falla, y las funciones lo manejarán.
+db = client[DB_NAME] if client is not None else None
+collection = db[COLLECTION_NAME] if db is not None else None
+documentos_collection = db["documentos_importantes"] if db is not None else None
 
 def registrar_mantenimiento(registro):
     if collection is None:
@@ -129,3 +138,71 @@ def obtener_estadisticas_fallas(filtro_tren=None, filtro_coche=None):
     resultados = list(collection.aggregate(pipeline))
     
     return pd.DataFrame(resultados)
+
+def guardar_documento(titulo, descripcion, nombre_archivo, categoria, codigo_falla=None):
+    """Guarda la metadata de un nuevo documento en la base de datos."""
+    if documentos_collection is None:
+        raise ConnectionFailure("No hay conexión a la base de datos.")
+    documento = {
+        "titulo": titulo,
+        "descripcion": descripcion,
+        "categoria": categoria,
+        "codigo_falla": str(codigo_falla) if codigo_falla else None,
+        "nombre_archivo": nombre_archivo,
+        "fecha_carga": datetime.now()
+    }
+    return documentos_collection.insert_one(documento)
+
+def obtener_documentos(texto_busqueda=None, categoria=None, codigo_falla=None):
+    """
+    Obtiene documentos de la base de datos, con filtros opcionales.
+    - texto_busqueda: Busca en el título y la descripción.
+    - categoria: Filtra por una categoría específica.
+    """
+    if documentos_collection is None:
+        raise ConnectionFailure("No hay conexión a la base de datos.")
+    
+    # Lista de condiciones que deben cumplirse todas (AND)
+    query_conditions = []
+    
+    if codigo_falla and codigo_falla.strip():
+        regex_codigo = {"$regex": codigo_falla.strip(), "$options": "i"}
+        query_conditions.append({"codigo_falla": regex_codigo})
+
+    if texto_busqueda and texto_busqueda.strip():
+        regex_texto = {"$regex": texto_busqueda, "$options": "i"}
+        query_conditions.append({"$or": [{"titulo": regex_texto}, {"descripcion": regex_texto}]})
+
+    if categoria and categoria != "Todos":
+        query_conditions.append({"categoria": categoria})
+
+    # Construimos la consulta final. Si hay condiciones, las unimos con AND.
+    query = {"$and": query_conditions} if query_conditions else {}
+    
+    return documentos_collection.find(query).sort("fecha_carga", -1)
+
+def buscar_evento(codigo=None, texto=None, categoria=None):
+    """
+    Busca eventos por código, texto libre y/o categoría.
+    """
+    if documentos_collection is None:
+        raise ConnectionFailure("No hay conexión a la base de datos.")
+
+    query_conditions = []
+    if codigo and codigo.strip():
+        query_conditions.append({"codigo_tcms": {"$regex": codigo, "$options": "i"}})
+    
+    if texto and texto.strip():
+        regex_texto = {"$regex": texto, "$options": "i"}
+        query_conditions.append({
+            "$or": [
+                {"evento": regex_texto},
+                {"descripcion": regex_texto}
+            ]
+        })
+    
+    if categoria and categoria != "Todas":
+        query_conditions.append({"categoria": categoria})
+
+    query = {"$and": query_conditions} if query_conditions else {}
+    return list(documentos_collection.find(query))

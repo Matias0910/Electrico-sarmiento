@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import base64
 from database import registrar_mantenimiento
-from datetime import date
+from datetime import date, datetime
 from pdf_utils import generar_pdf
 
 
@@ -47,7 +47,7 @@ def agregar_tarea(sistema, datos):
     st.session_state.pdf_bytes = None  # Invalida el PDF previo al agregar nueva tarea
 
 # --- Configuración de Tareas (Refactorización) ---
-COCHES = ["TC1", "M1-1", "M2-1", "T3", "M1-2", "M2-2", "M4", "M3", "TC2"]
+COCHES = ["TC1", "M1-1", "M2-1", "T3", "M1-2", "M2-2", "M3", "M4", "TC2"]
 
 TAREAS_CONFIG = [
     {"nombre": "FUSIBLES (PATÍN)", "tipo_entrada": "fusibles_layout", "campos": [
@@ -59,7 +59,7 @@ TAREAS_CONFIG = [
     ]},
     {"nombre": "LUCES DE PODER (Cabinas)", "tipo_entrada": "luces_cabina_layout", "campos": [
         {"label": "Tipo", "tipo": "selectbox", "opciones": ["Alta", "Baja"]},
-        {"label": "Causa", "tipo": "selectbox", "opciones": ["Balasto", "Lámpara"]},
+        {"label": "Causa", "tipo": "selectbox", "opciones": ["Balasto", "Lámpara", "Balasto y Lampara"]},
     ]},
     {"nombre": "ILUMINACIÓN INTERNA", "tipo_entrada": "iluminacion_layout", "campos": [
         {"label": "Componente", "tipo": "selectbox", "opciones": ["Tubo LED", "Tubo LED con Puente", "Fluo 36w"]},
