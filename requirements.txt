@@ -3,6 +3,7 @@ streamlit>=1.39
 pymongo
 python-dotenv
 pandas
+plotly
 fpdf2
 pdfplumber
 

@@ -7,22 +7,22 @@ st.set_page_config(page_title="Estadísticas y Alertas", layout="wide")
 st.title("📊 Estadísticas y Alertas de Fallas")
 st.write("Analiza las fallas más recurrentes por tren y por coche para un mantenimiento proactivo.")
 
-# --- Constantes ---
-COCHES = ["TC1", "M1-1", "M2-1", "T3", "M1-2", "M2-2", "M4", "M3", "TC2"]
+# --- Barra lateral de Filtros ---
+st.sidebar.header("Filtros")
 
-# --- Filtros ---
-st.subheader("Filtros de Búsqueda")
-col1, col2 = st.columns(2)
+# Buscador por texto para componente
+busqueda_componente = st.sidebar.text_input(
+    "Buscar componente por nombre",
+    placeholder="Ej: Fusible, Luz, Camara..."
+)
 
-with col1:
-    # Selector para todos los trenes, incluyendo una opción para ver "Todos"
-    trenes_disponibles = ["Todos"] + [f"{i:02d}" for i in range(1, 26)]
-    filtro_tren = st.selectbox("Seleccionar Tren", trenes_disponibles)
+# Filtros originales de Tren y Coche
+trenes_disponibles = ["Todos"] + [f"{i:02d}" for i in range(1, 26)]
+filtro_tren = st.sidebar.selectbox("Seleccionar Tren", trenes_disponibles)
 
-with col2:
-    # Selector para todos los coches, incluyendo una opción para ver "Todos"
-    coches_disponibles = ["Todos"] + COCHES
-    filtro_coche = st.selectbox("Seleccionar Coche", coches_disponibles)
+COCHES = ["TC1", "M1-1", "M2-1", "T3", "M1-2", "M2-2", "M3", "M4", "TC2"]
+coches_disponibles = ["Todos"] + COCHES
+filtro_coche = st.sidebar.selectbox("Seleccionar Coche", coches_disponibles)
 
 st.divider()
 
@@ -32,19 +32,48 @@ try:
     tren_a_buscar = filtro_tren if filtro_tren != "Todos" else None
     coche_a_buscar = filtro_coche if filtro_coche != "Todos" else None
 
+    # Obtenemos el DataFrame con todas las estadísticas desde la base de datos
     df_estadisticas = obtener_estadisticas_fallas(filtro_tren=tren_a_buscar, filtro_coche=coche_a_buscar)
+
+    # Aplicamos el filtro de búsqueda por texto si el usuario escribió algo
+    if busqueda_componente:
+        # Diccionario de sinónimos para una búsqueda más inteligente
+        SINONIMOS = {
+            'luces': ['luces', 'luz', 'iluminacion', 'iluminación'],
+            'fusibles': ['fusible', 'fusibles'],
+            'camaras': ['camara', 'camaras'],
+        }
+        
+        termino_buscado = busqueda_componente.lower()
+        patron_busqueda = termino_buscado
+        
+        for clave, lista_sinonimos in SINONIMOS.items():
+            if termino_buscado in lista_sinonimos:
+                patron_busqueda = '|'.join(lista_sinonimos) # Crea un patrón regex: 'luces|luz|iluminacion'
+                break
+        df_estadisticas = df_estadisticas[df_estadisticas['Componente / Tarea'].str.contains(patron_busqueda, case=False, na=False, regex=True)]
 
     if df_estadisticas.empty:
         st.info("No se encontraron datos de fallas con los filtros seleccionados.")
     else:
         st.subheader("Ranking de Fallas Recurrentes")
-        # Usamos st.dataframe para una tabla interactiva y con buen formato
         
-        # Función para resaltar solo los números en la columna 'Cantidad'
+        # Función para resaltar la cantidad cuando es mayor a 1
         def resaltar_cantidad(val):
-            return 'color: red; font-weight: bold;' if val > 1 else ''
+            return 'color: red; font-weight: bold;' if isinstance(val, (int, float)) and val > 1 else ''
 
-        st.dataframe(df_estadisticas.style.map(resaltar_cantidad, subset=['Cantidad']), use_container_width=True, hide_index=True)
+        # Reordenamos las columnas para que 'Tren' aparezca primero
+        columnas_ordenadas = ['Tren', 'Coche', 'Componente / Tarea', 'Causa de la Falla', 'Cantidad']
+        # Nos aseguramos de que solo usamos las columnas que existen en el dataframe para evitar errores
+        columnas_a_mostrar = [col for col in columnas_ordenadas if col in df_estadisticas.columns]
+        df_mostrado = df_estadisticas[columnas_a_mostrar]
+
+        # Mostramos la tabla con el estilo
+        st.dataframe(
+            df_mostrado.style.map(resaltar_cantidad, subset=['Cantidad']),
+            use_container_width=True,
+            hide_index=True
+        )
 
 except Exception as e:
     st.error(f"❌ Ocurrió un error al obtener las estadísticas: {e}")

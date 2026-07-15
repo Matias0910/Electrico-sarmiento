@@ -59,6 +59,12 @@ def buscar_informes(query={}):
     # Ordena por fecha descendente para mostrar los más recientes primero
     return collection.find(query).sort("fecha", -1) 
 
+def obtener_todos_los_informes():
+    """Obtiene todos los informes de la base de datos como una lista."""
+    if collection is None:
+        raise ConnectionFailure("No hay conexión a la base de datos. Revisa la consola o la URI de conexión.")
+    return list(collection.find({}).sort("fecha", -1))
+
 def eliminar_informe(informe_id):
     if collection is None:
         raise ConnectionFailure("No hay conexión a la base de datos. Revisa la consola o la URI de conexión.")
@@ -115,7 +121,8 @@ def obtener_estadisticas_fallas(filtro_tren=None, filtro_coche=None):
             "_id": {
                 "sistema": "$tareas.sistema",
                 "causa": {"$ifNull": ["$tareas.datos.Causa", "N/A"]},
-                "coche": {"$ifNull": ["$tareas.datos.Coche", "N/A"]}
+                "coche": {"$ifNull": ["$tareas.datos.Coche", "N/A"]},
+                "tren": "$tren"
             },
             "cantidad": {"$sum": 1}
         }
@@ -128,6 +135,7 @@ def obtener_estadisticas_fallas(filtro_tren=None, filtro_coche=None):
     pipeline.append({
         "$project": {
             "_id": 0,
+            "Tren": "$_id.tren",
             "Coche": "$_id.coche",
             "Componente / Tarea": "$_id.sistema",
             "Causa de la Falla": "$_id.causa",
