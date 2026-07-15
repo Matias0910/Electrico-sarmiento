@@ -13,3 +13,9 @@ textColor="#FFFFFF"
 
 # Fuente a utilizar en la aplicación
 font="sans serif"
+
+[server]
+# Render debe publicar Streamlit desde la raiz del servicio para que /_stcore
+# (health y host-config) no quede bajo la ruta de una pagina multipage.
+baseUrlPath=""
+headless=true
