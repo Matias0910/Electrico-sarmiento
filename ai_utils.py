@@ -13,7 +13,7 @@ ultimo_error_ia = ""
 
 try:
     genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-    model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-3.5-flash"))
+    model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite"))
 except Exception as e:
     print(f"ADVERTENCIA: No se pudo configurar la API de Google. Error: {e}")
     model = None

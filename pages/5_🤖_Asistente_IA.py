@@ -28,13 +28,31 @@ st.info("También puedes preguntar por fallas: '¿Qué dice la falla 3101?'")
 # --- Estilos CSS para mejorar la legibilidad ---
 st.markdown("""
 <style>
-    /* Botón "Procesar texto" */
-    button[data-testid="stButton"] > p {
-        color: white;
+    /* Aplicar estilo a todos los botones de Streamlit */
+    div[data-testid="stButton"] > button {
+        background-color: #0073B8 !important;
+        color: white !important;
+        border: 1px solid #005a8d !important;
     }
-    /* Contenedor de la sugerencia de la IA (st.info) */
-    div[data-testid="stInfo"] {
-        background-color: #0073B8; /* Un azul más oscuro para contraste */
+    
+    /* Asegurar que el texto dentro del botón sea blanco y legible */
+    div[data-testid="stButton"] > button p {
+        color: white !important;
+        font-weight: bold;
+    }
+    
+    /* Atacamos todas las variantes de cajas de alerta (st.info, st.success, etc.) */
+    div[data-testid="stAlert"], 
+    div[data-testid="stNotification"],
+    div[role="alert"] {
+        background-color: #0073B8 !important;
+    }
+
+    /* Forzamos absolutamente todo el texto, títulos y viñetas dentro de la alerta a ser blanco */
+    div[data-testid="stAlert"] *, 
+    div[data-testid="stNotification"] *,
+    div[role="alert"] * {
+        color: white !important;
     }
 </style>
 """, unsafe_allow_html=True)
