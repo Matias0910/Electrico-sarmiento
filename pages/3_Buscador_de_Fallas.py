@@ -16,6 +16,41 @@ def get_pdf_as_base64(file_path):
         pdf_bytes = f.read()
     return base64.b64encode(pdf_bytes).decode('utf-8')
 
+# --- Lógica de Autenticación (copiada en cada página) ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+USUARIOS = {
+    "matias": "castelar2026",
+    "pablo": "qwerty",
+    "diego": "fusible123",
+    "richard": "cabinero789"
+}
+
+def verificar_credenciales(usuario, password):
+    usr = usuario.strip().lower()
+    return usr in USUARIOS and USUARIOS[usr] == password
+
+if not st.session_state.logged_in:
+    st.title("🔑 Acceso - Depósito Castelar")
+    st.info("Por favor, inicia sesión para acceder a esta página.")
+    
+    with st.form("login_form_page"):
+        usuario = st.text_input("Usuario (Nombre)")
+        password = st.text_input("Contraseña", type="password")
+        boton_ingresar = st.form_submit_button("Iniciar Sesión")
+        
+        if boton_ingresar:
+            if verificar_credenciales(usuario, password):
+                st.session_state.logged_in = True
+                st.session_state.usuario_activo = usuario.strip().capitalize()
+                st.rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos")
+    st.stop()
+
+# --- Fin de la Lógica de Autenticación ---
+
 st.title("🔎 Buscador de Fallas por Código, Texto o Categoría")
 st.write("Usa los filtros para encontrar rápidamente la descripción, resolución y plano asociado a un evento.")
 

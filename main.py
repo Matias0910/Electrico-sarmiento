@@ -24,12 +24,52 @@ st.title("⚡ Carga de Informe Técnico (Electrico) - Depósito Castelar")
 
 # --- Inicialización del estado de la sesión ---
 # Es una buena práctica inicializar todas las claves del estado de sesión al principio.
+# 1. Inicializar el estado de la sesión para login y tareas
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "usuario_activo" not in st.session_state:
+    st.session_state.usuario_activo = None
 if 'lista_tareas' not in st.session_state:
     st.session_state.lista_tareas = []
 if 'pdf_bytes' not in st.session_state:
     st.session_state.pdf_bytes = None
 if 'tareas_multi_temp' not in st.session_state:
     st.session_state.tareas_multi_temp = {}
+
+# 2. Diccionario con los 4 encargados (Usuario: Contraseña)
+USUARIOS = {
+    "matias": "castelar2026",
+    "pablo": "qwerty",
+    "diego": "fusible123",
+    "richard": "cabinero789"
+}
+
+def verificar_credenciales(usuario, password):
+    # Convertimos a minúsculas para evitar problemas con las mayúsculas al escribir el usuario
+    usr = usuario.strip().lower()
+    if usr in USUARIOS and USUARIOS[usr] == password:
+        return True
+    return False
+
+# 3. Pantalla de Login
+if not st.session_state.logged_in:
+    st.title("🔑 Acceso - Depósito Castelar")
+    
+    with st.form("login_form"):
+        usuario = st.text_input("Usuario (Nombre)")
+        password = st.text_input("Contraseña", type="password")
+        boton_ingresar = st.form_submit_button("Iniciar Sesión")
+        
+        if boton_ingresar:
+            if verificar_credenciales(usuario, password):
+                st.session_state.logged_in = True
+                st.session_state.usuario_activo = usuario.strip().capitalize() # Guarda quién entró
+                st.rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos")
+    st.stop()
+
+st.title("⚡ Carga de Informe Técnico (Electrico) - Depósito Castelar")
 
 # --- Sidebar ---
 with st.sidebar:
@@ -440,6 +480,7 @@ if st.session_state.lista_tareas:
                     "tren": tren, 
                     "km": km, 
                     "tareas": st.session_state.lista_tareas, 
+                    "cargado_por": st.session_state.get("usuario_activo", "N/A"), # Guardamos quién cargó el informe
                     "obs": "" # Las observaciones ahora se manejan en la sección de Notas
                 }
                 inserted_id = registrar_mantenimiento(datos_informe)
