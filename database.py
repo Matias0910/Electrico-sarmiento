@@ -82,6 +82,18 @@ def eliminar_tarea_de_informe(informe_id, tarea_a_eliminar):
     )
     return resultado.modified_count
 
+def agregar_tarea_a_informe(informe_id, nueva_tarea):
+    """Agrega una nueva tarea a la lista de tareas de un informe existente."""
+    if collection is None:
+        raise ConnectionFailure("No hay conexión a la base de datos.")
+    
+    resultado = collection.update_one(
+        {"_id": informe_id},
+        {"$push": {"tareas": nueva_tarea}}
+    )
+    return resultado.modified_count
+
+@st.cache_data
 def obtener_estadisticas_fallas(filtro_tren=None, filtro_coche=None):
     """
     Obtiene y procesa estadísticas de fallas desde MongoDB usando un pipeline de agregación.

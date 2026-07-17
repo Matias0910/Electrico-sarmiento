@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import base64
+import auth
 from database import registrar_mantenimiento
 from datetime import date, datetime
 from pdf_utils import generar_pdf
@@ -20,56 +21,15 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-st.title("⚡ Carga de Informe Técnico (Electrico) - Depósito Castelar")
+
+if not auth.check_authentication(): # Si no está autenticado
+    auth.login() # Muestra el formulario de login
+    st.stop() # Detiene la ejecución para no mostrar el resto de la app
 
 # --- Inicialización del estado de la sesión ---
-# Es una buena práctica inicializar todas las claves del estado de sesión al principio.
-# 1. Inicializar el estado de la sesión para login y tareas
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "usuario_activo" not in st.session_state:
-    st.session_state.usuario_activo = None
-if 'lista_tareas' not in st.session_state:
+# Nos aseguramos de que la lista de tareas exista desde el principio.
+if "lista_tareas" not in st.session_state:
     st.session_state.lista_tareas = []
-if 'pdf_bytes' not in st.session_state:
-    st.session_state.pdf_bytes = None
-if 'tareas_multi_temp' not in st.session_state:
-    st.session_state.tareas_multi_temp = {}
-
-# 2. Diccionario con los 4 encargados (Usuario: Contraseña)
-USUARIOS = {
-    "matias": "castelar2026",
-    "pablo": "qwerty",
-    "diego": "fusible123",
-    "richard": "cabinero789"
-}
-
-def verificar_credenciales(usuario, password):
-    # Convertimos a minúsculas para evitar problemas con las mayúsculas al escribir el usuario
-    usr = usuario.strip().lower()
-    if usr in USUARIOS and USUARIOS[usr] == password:
-        return True
-    return False
-
-# 3. Pantalla de Login
-if not st.session_state.logged_in:
-    st.title("🔑 Acceso - Depósito Castelar")
-    
-    with st.form("login_form"):
-        usuario = st.text_input("Usuario (Nombre)")
-        password = st.text_input("Contraseña", type="password")
-        boton_ingresar = st.form_submit_button("Iniciar Sesión")
-        
-        if boton_ingresar:
-            if verificar_credenciales(usuario, password):
-                st.session_state.logged_in = True
-                st.session_state.usuario_activo = usuario.strip().capitalize() # Guarda quién entró
-                st.rerun()
-            else:
-                st.error("Usuario o contraseña incorrectos")
-    st.stop()
-
-st.title("⚡ Carga de Informe Técnico (Electrico) - Depósito Castelar")
 
 # --- Sidebar ---
 with st.sidebar:
@@ -79,6 +39,11 @@ with st.sidebar:
     tren = st.selectbox("Tren", [f"{i:02d}" for i in range(1, 26)])
     km = st.number_input("Kilometraje", min_value=0)
     st.divider()
+    if st.button("🔒 Cerrar Sesión", key="logout_main"):
+        auth.logout()
+        st.rerun()
+
+st.title("⚡ Carga de Informe Técnico (Electrico) - Depósito Castelar")
 
 # --- Función auxiliar para agregar tareas ---
 def agregar_tarea(sistema, datos):
@@ -133,10 +98,11 @@ TAREAS_CONFIG = [
     {"nombre": "PW", "tipo_entrada": "simple_check_layout", "campos": []},
 ]
 
-# Lista para recolectar todas las tareas antes de agregarlas
-tareas_a_agregar_global = []
-
 def generar_formularios_tareas(tipo_informe_seleccionado):
+    # Inicializamos el contenedor de tareas en el estado de sesión si no existe
+    if 'tareas_a_agregar_global' not in st.session_state:
+        st.session_state.tareas_a_agregar_global = []
+
     """Genera dinámicamente los expanders y formularios para cada tipo de tarea."""
     for i, config in enumerate(TAREAS_CONFIG):
         # Lógica para mostrar tareas condicionalmente
@@ -178,7 +144,7 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                                     elif campo["tipo"] == "number_input":
                                         datos_coche_actual[campo['label']] = st.number_input(campo['label'], min_value=campo.get("min_value", 1), value=campo.get('default', 1), key=key)
                             # Guardamos los datos del formulario para este coche
-                            tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, **datos_coche_actual}})
+                            st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, **datos_coche_actual}})
 
             elif tipo_entrada == "simple": # Para tareas genéricas de un solo formulario
                 # Añadimos un toggle para que el usuario decida si quiere agregar esta tarea
@@ -200,7 +166,7 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                 
                 if activar_tarea:
                     # Solo recolectamos los datos si la tarea fue activada explícitamente
-                    tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos_capturados})
+                    st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos_capturados})
             
             elif tipo_entrada == "limpieza_layout":
                 tarea_realizada = st.checkbox("Tarea Realizada", key=f"{key_prefix}realizada")
@@ -208,7 +174,7 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                     # Si se marca, se agrega la tarea para cada coche definido en la configuración
                     for coche in config["coches"]:
                         datos = {"Coche": coche, "Estado": "Realizado"}
-                        tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
+                        st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
 
             
             elif tipo_entrada == "precintos_layout":
@@ -228,9 +194,9 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
 
                 # Recolectar si hay datos
                 if any(datos_tc1.values()):
-                    tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": "TC1", **datos_tc1}})
+                    st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": "TC1", **datos_tc1}})
                 if any(datos_tc2.values()):
-                    tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": "TC2", **datos_tc2}})
+                    st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": "TC2", **datos_tc2}})
 
             elif tipo_entrada == "fusibles_layout":
                 st.write("**Paso 1: Selecciona los coches a intervenir**")
@@ -258,10 +224,10 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                                 causa_b2_s = st.selectbox("Lado Sur", opciones_causa, key=f"{key_prefix}{coche}_b2_s")
 
                             # Recolectar tareas si se seleccionó una causa
-                            if causa_b1_n != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Boguie": "Boguie 1", "Lado": "Norte", "Causa": causa_b1_n}})
-                            if causa_b1_s != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Boguie": "Boguie 1", "Lado": "Sur", "Causa": causa_b1_s}})
-                            if causa_b2_n != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Boguie": "Boguie 2", "Lado": "Norte", "Causa": causa_b2_n}})
-                            if causa_b2_s != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Boguie": "Boguie 2", "Lado": "Sur", "Causa": causa_b2_s}})
+                            if causa_b1_n != "-": st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Boguie": "Boguie 1", "Lado": "Norte", "Causa": causa_b1_n}})
+                            if causa_b1_s != "-": st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Boguie": "Boguie 1", "Lado": "Sur", "Causa": causa_b1_s}})
+                            if causa_b2_n != "-": st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Boguie": "Boguie 2", "Lado": "Norte", "Causa": causa_b2_n}})
+                            if causa_b2_s != "-": st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Boguie": "Boguie 2", "Lado": "Sur", "Causa": causa_b2_s}})
 
             elif tipo_entrada == "trencitas_layout":
                 st.write("**Paso 1: Selecciona los coches a intervenir**")
@@ -285,8 +251,8 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                                 causa_ppal = st.selectbox("Caja Principal", opciones_causa, key=f"{key_prefix}{coche}_ppal")
 
                             # Recolectar tareas si se seleccionó una causa
-                            if causa_aux != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Caja Auxiliar", "Causa": causa_aux}})
-                            if causa_ppal != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Caja Principal", "Causa": causa_ppal}})
+                            if causa_aux != "-": st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Caja Auxiliar", "Causa": causa_aux}})
+                            if causa_ppal != "-": st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Caja Principal", "Causa": causa_ppal}})
 
             elif tipo_entrada == "camaras_layout":
                 opciones_causa = ["-"] + config["campos"][0]["opciones"]
@@ -300,8 +266,8 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                         causa_pupitre = col1.selectbox("Cámara Pupitre", opciones_causa, key=f"{key_prefix}{coche_cabina}_pupitre")
                         causa_via = col2.selectbox("Cámara Ruta de Vía", opciones_causa, key=f"{key_prefix}{coche_cabina}_via")
 
-                        if causa_pupitre != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche_cabina, "Ubicación": "Pupitre", "Causa": causa_pupitre}})
-                        if causa_via != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche_cabina, "Ubicación": "Ruta de Vía", "Causa": causa_via}})
+                        if causa_pupitre != "-": st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche_cabina, "Ubicación": "Pupitre", "Causa": causa_pupitre}})
+                        if causa_via != "-": st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche_cabina, "Ubicación": "Ruta de Vía", "Causa": causa_via}})
                 
                 st.divider()
 
@@ -321,8 +287,8 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                             st.subheader(f"Cámaras para: {coche}")
                             causa_c1 = st.selectbox("Cámara 1", opciones_causa, key=f"{key_prefix}{coche}_c1")
                             causa_c2 = st.selectbox("Cámara 2", opciones_causa, key=f"{key_prefix}{coche}_c2")
-                            if causa_c1 != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Cámara 1", "Causa": causa_c1}})
-                            if causa_c2 != "-": tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Cámara 2", "Causa": causa_c2}})
+                            if causa_c1 != "-": st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Cámara 1", "Causa": causa_c1}})
+                            if causa_c2 != "-": st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": {"Coche": coche, "Ubicación": "Cámara 2", "Causa": causa_c2}})
 
             elif tipo_entrada == "luces_cabina_layout":
                 for coche_cabina in ["TC1", "TC2"]:
@@ -342,9 +308,9 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                         causa_s = col_s2.selectbox("Causa", opciones_causa, key=f"{key_prefix}{coche_cabina}_s_causa")
 
                         if tipo_n != "-" and causa_n != "-":
-                            tareas_a_agregar_global.append({"nombre_tarea": "LUCES DE PODER", "datos_completos": {"Coche": coche_cabina, "Sentido": "Norte", "Tipo": tipo_n, "Causa": causa_n}})
+                            st.session_state.tareas_a_agregar_global.append({"nombre_tarea": "LUCES DE PODER", "datos_completos": {"Coche": coche_cabina, "Sentido": "Norte", "Tipo": tipo_n, "Causa": causa_n}})
                         if tipo_s != "-" and causa_s != "-":
-                            tareas_a_agregar_global.append({"nombre_tarea": "LUCES DE PODER", "datos_completos": {"Coche": coche_cabina, "Sentido": "Sur", "Tipo": tipo_s, "Causa": causa_s}})
+                            st.session_state.tareas_a_agregar_global.append({"nombre_tarea": "LUCES DE PODER", "datos_completos": {"Coche": coche_cabina, "Sentido": "Sur", "Tipo": tipo_s, "Causa": causa_s}})
 
             elif tipo_entrada == "iluminacion_layout":
                 st.write("**Paso 1: Selecciona los coches a intervenir**")
@@ -370,7 +336,7 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                                 cantidad = col2.number_input("Cantidad", min_value=0, value=0, step=1, key=f"{key_prefix}{coche}_{comp}_cant")
 
                                 if causa != "-" and cantidad > 0:
-                                    tareas_a_agregar_global.append({
+                                    st.session_state.tareas_a_agregar_global.append({
                                         "nombre_tarea": config['nombre'],
                                         "datos_completos": {
                                             "Coche": coche,
@@ -388,7 +354,7 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                     if realizado:
                         # Si se marca, se agrega la tarea para ese coche
                         datos = {"Coche": coche, "Estado": "Cambiado"}
-                        tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
+                        st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
 
             elif tipo_entrada == "simple_check_salon_layout":
                 st.write("**Selecciona los coches donde se realizó el cambio:**")
@@ -399,7 +365,7 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                     if realizado:
                         # Si se marca, se agrega la tarea para ese coche
                         datos = {"Coche": coche, "Estado": "Cambiado"}
-                        tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
+                        st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
 
             elif tipo_entrada == "simple_check_cabinas_layout":
                 st.write("**Selecciona la cabina donde se realizó el cambio:**")
@@ -409,25 +375,28 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
                     realizado = cols_coches[idx].checkbox(coche, key=f"{key_prefix}check_{coche}")
                     if realizado:
                         datos = {"Coche": coche, "Estado": "Cambiado"}
-                        tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
+                        st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
 
             elif tipo_entrada == "confirmacion_simple_layout":
                 st.write("Marca la casilla para confirmar que la tarea fue completada.")
                 tarea_realizada = st.checkbox("Tarea Realizada", key=f"{key_prefix}realizada")
                 if tarea_realizada:
                     datos = {"Estado": "Realizado"}
-                    tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
+                    st.session_state.tareas_a_agregar_global.append({"nombre_tarea": config['nombre'], "datos_completos": datos})
 
 # --- Carga de Tareas (UI) ---
 st.subheader("Agregar Tareas al Informe")
+# Limpiamos la lista de recolección antes de volver a generar los formularios
+if 'tareas_a_agregar_global' in st.session_state:
+    st.session_state.tareas_a_agregar_global.clear()
 generar_formularios_tareas(tipo_informe)
 
 # --- Botón Global para Agregar Tareas ---
-if st.button(f"✅ Agregar Tareas al Informe", key="add_all_global", type="primary"):
-    if tareas_a_agregar_global:
-        for tarea in tareas_a_agregar_global:
+if st.button("✅ Agregar Tareas al Informe", key="add_all_global", type="primary"):
+    if 'tareas_a_agregar_global' in st.session_state and st.session_state.tareas_a_agregar_global:
+        for tarea in st.session_state.tareas_a_agregar_global:
             agregar_tarea(tarea['nombre_tarea'], tarea['datos_completos'])
-        st.rerun()
+        st.session_state.tareas_a_agregar_global.clear()
 
 with st.expander("Otras Tareas / Notas"):
     # Callback para limpiar los campos de texto de las notas
@@ -472,7 +441,7 @@ if st.session_state.lista_tareas:
     # --- Botones de Acción ---
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("💾 Confirmar y Guardar", type="primary", use_container_width=True):
+        if st.button("💾 Confirmar y Guardar", type="primary", key="save_report_main", help="Guarda el informe en la base de datos.", width='stretch'):
             try:
                 datos_informe = {
                     "fecha": fecha_trabajo.isoformat(),
@@ -494,7 +463,7 @@ if st.session_state.lista_tareas:
                 st.error(f"❌ Hubo un error al guardar el informe: {e}")
 
     with col2:
-        if st.button("👁️ Previsualizar PDF", use_container_width=True):
+        if st.button("👁️ Previsualizar PDF", key="preview_pdf_main", help="Genera una vista previa del PDF sin guardarlo.", width='stretch'):
             pdf_bytes = generar_pdf(fecha_trabajo, tren, km, st.session_state.lista_tareas, "")
             st.session_state.pdf_bytes = pdf_bytes # Guardar en el estado de la sesión
 

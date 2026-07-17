@@ -3,17 +3,17 @@ import os
 import re
 import unicodedata
 
-import google.generativeai as genai
+import google.generativeai as genai_legacy
 from dotenv import load_dotenv
 
 
 load_dotenv()
 
 ultimo_error_ia = ""
-
+model = None # Asegurarse de que model exista
 try:
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-    model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite"))
+    genai_legacy.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+    model = genai_legacy.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite"))
 except Exception as e:
     print(f"ADVERTENCIA: No se pudo configurar la API de Google. Error: {e}")
     model = None

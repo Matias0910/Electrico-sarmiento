@@ -8,52 +8,24 @@ import re
 import speech_recognition as sr
 import streamlit as st
 from streamlit_mic_recorder import mic_recorder
-
+import auth # Importamos el módulo completo
 import ai_utils
 from database import buscar_evento
 
+# Recargamos los módulos para asegurar que los cambios se apliquen
+auth = importlib.reload(auth)
 ai_utils = importlib.reload(ai_utils)
-interpretar_comando_con_ia = ai_utils.interpretar_comando_con_ia
-obtener_ultimo_error_ia = ai_utils.obtener_ultimo_error_ia
-generar_solucion_practica_con_ia = ai_utils.generar_solucion_practica_con_ia
-from database import buscar_evento
 
 st.set_page_config(page_title="Asistente IA", layout="wide")
 
-# --- Lógica de Autenticación (copiada en cada página) ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-USUARIOS = {
-    "matias": "castelar2026",
-    "pablo": "qwerty",
-    "diego": "fusible123",
-    "richard": "cabinero789"
-}
-
-def verificar_credenciales(usuario, password):
-    usr = usuario.strip().lower()
-    return usr in USUARIOS and USUARIOS[usr] == password
-
-if not st.session_state.logged_in:
-    st.title("🔑 Acceso - Depósito Castelar")
-    st.info("Por favor, inicia sesión para acceder a esta página.")
-    
-    with st.form("login_form_page"):
-        usuario = st.text_input("Usuario (Nombre)")
-        password = st.text_input("Contraseña", type="password")
-        boton_ingresar = st.form_submit_button("Iniciar Sesión")
-        
-        if boton_ingresar:
-            if verificar_credenciales(usuario, password):
-                st.session_state.logged_in = True
-                st.session_state.usuario_activo = usuario.strip().capitalize()
-                st.rerun()
-            else:
-                st.error("Usuario o contraseña incorrectos")
+if not auth.check_authentication(): # Si no está autenticado
+    auth.login() # Muestra el formulario de login
     st.stop()
 
-# --- Fin de la Lógica de Autenticación ---
+# --- Inicialización del estado de la sesión ---
+# Nos aseguramos de que la lista de tareas exista.
+if "lista_tareas" not in st.session_state:
+    st.session_state.lista_tareas = []
 
 st.title("Asistente de Carga por Voz y Texto")
 st.write("Graba o escribe tu comando. La IA intentara rellenar las tareas por vos.")
@@ -134,11 +106,11 @@ def agregar_tareas_desde_texto(texto):
     st.write(f"**Comando detectado:** {texto}")
 
     with st.spinner("Procesando con IA..."):
-        respuesta_ia = interpretar_comando_con_ia(texto)
+        respuesta_ia = ai_utils.interpretar_comando_con_ia(texto)
 
     if not respuesta_ia:
         st.warning("La IA no pudo interpretar el comando.")
-        detalle_error = obtener_ultimo_error_ia()
+        detalle_error = ai_utils.obtener_ultimo_error_ia()
         if detalle_error:
             st.error(detalle_error)
         return
@@ -152,7 +124,7 @@ def agregar_tareas_desde_texto(texto):
         buscar_y_mostrar_falla(codigo_falla)
     else:
         st.warning("La IA no pudo determinar una acción clara (agregar tarea o buscar falla).")
-        detalle_error = obtener_ultimo_error_ia() or respuesta_ia.get("detalle")
+        detalle_error = ai_utils.obtener_ultimo_error_ia() or respuesta_ia.get("detalle")
         if detalle_error:
             st.error(detalle_error)
 
@@ -163,7 +135,7 @@ def obtener_sugerencia_ia_cacheada(descripcion, resolucion):
     Si los mismos argumentos (descripción y resolución) se usan de nuevo,
     Streamlit devolverá el resultado cacheado en lugar de llamar a la IA.
     """
-    return generar_solucion_practica_con_ia(descripcion, resolucion)
+    return ai_utils.generar_solucion_practica_con_ia(descripcion, resolucion)
 
 def buscar_y_mostrar_falla(codigo):
     st.subheader(f"Resultado de la búsqueda para la falla '{codigo}':")
@@ -219,9 +191,6 @@ def buscar_y_mostrar_falla(codigo):
                         st.warning(f"⚠️ El PDF del plano '{nombre_archivo_plano}' no se encontró en la carpeta 'Planos'.")
 
 def agregar_tareas_a_session(tareas):
-    if "lista_tareas" not in st.session_state:
-        st.session_state.lista_tareas = []
-
     for tarea in tareas:
         tarea_informe = {
             "sistema": tarea["sistema"],

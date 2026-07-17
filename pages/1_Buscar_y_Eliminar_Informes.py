@@ -1,45 +1,15 @@
 import streamlit as st
-from database import buscar_informes, eliminar_informe, eliminar_tarea_de_informe
+import auth
+from database import buscar_informes, eliminar_informe, eliminar_tarea_de_informe, agregar_tarea_a_informe
 from pdf_utils import generar_pdf
 from datetime import datetime
 from bson.objectid import ObjectId
 
 st.set_page_config(page_title="Buscar Informes", layout="wide")
 
-# --- Lógica de Autenticación (copiada en cada página) ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-USUARIOS = {
-    "matias": "castelar2026",
-    "pablo": "qwerty",
-    "diego": "fusible123",
-    "richard": "cabinero789"
-}
-
-def verificar_credenciales(usuario, password):
-    usr = usuario.strip().lower()
-    return usr in USUARIOS and USUARIOS[usr] == password
-
-if not st.session_state.logged_in:
-    st.title("🔑 Acceso - Depósito Castelar")
-    st.info("Por favor, inicia sesión para acceder a esta página.")
-    
-    with st.form("login_form_page"):
-        usuario = st.text_input("Usuario (Nombre)")
-        password = st.text_input("Contraseña", type="password")
-        boton_ingresar = st.form_submit_button("Iniciar Sesión")
-        
-        if boton_ingresar:
-            if verificar_credenciales(usuario, password):
-                st.session_state.logged_in = True
-                st.session_state.usuario_activo = usuario.strip().capitalize()
-                st.rerun()
-            else:
-                st.error("Usuario o contraseña incorrectos")
+if not auth.check_authentication(): # Si no está autenticado
+    auth.login() # Muestra el formulario de login
     st.stop()
-
-# --- Fin de la Lógica de Autenticación ---
 
 
 st.title("🔎 Buscar y Eliminar Informes")
@@ -121,6 +91,22 @@ try:
 
                 st.write("**Observaciones:**")
                 st.write(informe.get("obs", "Sin observaciones."))
+
+                # --- Formulario para agregar nota ---
+                with st.form(key=f"nota_form_{informe_id_str}"):
+                    st.markdown("**✍️ Agregar Nota a este Informe**")
+                    nota_sistema = st.text_input("Título de la nota (Ej: Observación Adicional)", key=f"nota_sys_{informe_id_str}")
+                    nota_detalle = st.text_area("Detalle de la nota", key=f"nota_det_{informe_id_str}")
+                    
+                    submitted = st.form_submit_button("Agregar Nota")
+                    if submitted:
+                        if nota_sistema and nota_detalle:
+                            nueva_tarea = {"sistema": nota_sistema, "datos": {"Detalle": nota_detalle}}
+                            agregar_tarea_a_informe(informe["_id"], nueva_tarea)
+                            st.success("Nota agregada con éxito.")
+                            st.rerun()
+                        else:
+                            st.warning("Por favor, completa el título y el detalle de la nota.")
 
                 st.divider()
                 

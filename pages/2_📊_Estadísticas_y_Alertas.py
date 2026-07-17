@@ -1,43 +1,13 @@
 import streamlit as st
 import pandas as pd
+import auth
 from database import obtener_estadisticas_fallas
 
 st.set_page_config(page_title="Estadísticas y Alertas", layout="wide")
 
-# --- Lógica de Autenticación (copiada en cada página) ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-USUARIOS = {
-    "matias": "castelar2026",
-    "pablo": "qwerty",
-    "diego": "fusible123",
-    "richard": "cabinero789"
-}
-
-def verificar_credenciales(usuario, password):
-    usr = usuario.strip().lower()
-    return usr in USUARIOS and USUARIOS[usr] == password
-
-if not st.session_state.logged_in:
-    st.title("🔑 Acceso - Depósito Castelar")
-    st.info("Por favor, inicia sesión para acceder a esta página.")
-    
-    with st.form("login_form_page"):
-        usuario = st.text_input("Usuario (Nombre)")
-        password = st.text_input("Contraseña", type="password")
-        boton_ingresar = st.form_submit_button("Iniciar Sesión")
-        
-        if boton_ingresar:
-            if verificar_credenciales(usuario, password):
-                st.session_state.logged_in = True
-                st.session_state.usuario_activo = usuario.strip().capitalize()
-                st.rerun()
-            else:
-                st.error("Usuario o contraseña incorrectos")
+if not auth.check_authentication(): # Si no está autenticado
+    auth.login() # Muestra el formulario de login
     st.stop()
-
-# --- Fin de la Lógica de Autenticación ---
 
 st.title("📊 Estadísticas y Alertas de Fallas")
 st.write("Analiza las fallas más recurrentes por tren y por coche para un mantenimiento proactivo.")
@@ -55,6 +25,7 @@ busqueda_componente = st.sidebar.text_input(
 trenes_disponibles = ["Todos"] + [f"{i:02d}" for i in range(1, 26)]
 filtro_tren = st.sidebar.selectbox("Seleccionar Tren", trenes_disponibles)
 
+# Ordenamos los coches para que aparezcan de forma lógica en el filtro
 COCHES = ["TC1", "M1-1", "M2-1", "T3", "M1-2", "M2-2", "M3", "M4", "TC2"]
 coches_disponibles = ["Todos"] + COCHES
 filtro_coche = st.sidebar.selectbox("Seleccionar Coche", coches_disponibles)
@@ -102,6 +73,18 @@ try:
         # Nos aseguramos de que solo usamos las columnas que existen en el dataframe para evitar errores
         columnas_a_mostrar = [col for col in columnas_ordenadas if col in df_estadisticas.columns]
         df_mostrado = df_estadisticas[columnas_a_mostrar]
+
+        # --- Lógica de Ordenamiento Personalizado ---
+        # 1. Convertimos la columna 'Coche' a un tipo categórico con el orden correcto,
+        # asegurándonos de que los valores no presentes en COCHES (como 'N/A') se manejen correctamente.
+        coches_con_na = COCHES + [c for c in df_mostrado['Coche'].unique() if c not in COCHES]
+        df_mostrado['Coche'] = pd.Categorical(df_mostrado['Coche'], categories=coches_con_na, ordered=True)
+        
+        # 2. Ordenamos el DataFrame: primero por Tren, luego por el orden de Coche, y finalmente por Cantidad descendente.
+        df_mostrado = df_mostrado.sort_values(
+            by=['Tren', 'Coche', 'Cantidad'], 
+            ascending=[True, True, False]
+        )
 
         # Mostramos la tabla con el estilo
         st.dataframe(
