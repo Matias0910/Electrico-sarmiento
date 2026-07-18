@@ -94,8 +94,8 @@ TAREAS_CONFIG = [
     {"nombre": "INTERFAZ(SALON)", "tipo_entrada": "simple_check_salon_layout", "campos": []},
     {"nombre": "INTERFAZ (Cabina)", "tipo_entrada": "simple_check_cabinas_layout", "campos": []},
     {"nombre": "LCU", "tipo_entrada": "simple_check_layout", "campos": []},
-    {"nombre": "BCH", "tipo_entrada": "simple_check_layout", "campos": []},
-    {"nombre": "PW", "tipo_entrada": "simple_check_layout", "campos": []},
+    {"nombre": "BCH", "tipo_entrada": "simple_check_layout", "coches": ["M1-1", "M2-1", "M1-2", "M2-2", "M3", "M4"]},
+    {"nombre": "PW", "tipo_entrada": "simple_check_layout", "coches": ["M1-1", "M2-1", "M1-2", "M2-2", "M3", "M4"]},
 ]
 
 def generar_formularios_tareas(tipo_informe_seleccionado):
@@ -348,8 +348,9 @@ def generar_formularios_tareas(tipo_informe_seleccionado):
 
             elif tipo_entrada == "simple_check_layout":
                 st.write("**Selecciona los coches donde se realizó el cambio:**")
-                cols_coches = st.columns(len(COCHES))
-                for idx, coche in enumerate(COCHES):
+                coches_para_mostrar = config.get("coches", COCHES)
+                cols_coches = st.columns(len(coches_para_mostrar))
+                for idx, coche in enumerate(coches_para_mostrar):
                     realizado = cols_coches[idx].checkbox(coche, key=f"{key_prefix}check_{coche}")
                     if realizado:
                         # Si se marca, se agrega la tarea para ese coche
